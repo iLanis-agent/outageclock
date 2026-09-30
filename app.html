@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OutageClock - is my fridge food still safe?</title>
+<style>
+  :root {
+    --bg: #10131c; --card: #1a1f2e; --card2: #222941; --ink: #eef1f8; --muted: #93a0bd;
+    --amber: #f5b942; --amber-soft: #2c2617; --line: #2e3650;
+    --ok: #4ade80; --ok-soft: #16301f; --bad: #f87171; --bad-soft: #3a1d1d;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 20px 16px 60px; }
+  header h1 { font-size: 30px; margin: 10px 0 2px; letter-spacing: -0.5px; }
+  header h1 .candle { color: var(--amber); }
+  header p { color: var(--muted); margin: 0 0 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 18px 20px; margin: 0 0 18px; }
+  .card h2 { margin: 0 0 4px; font-size: 19px; }
+  .card .sub { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 3px; font-weight: 600; }
+  input, select { width: 100%; padding: 9px 10px; font-size: 16px; border: 1px solid var(--line);
+    border-radius: 9px; background: var(--card2); color: var(--ink); color-scheme: dark; }
+  input:focus, select:focus { outline: 2px solid var(--amber); outline-offset: -1px; }
+  .btn { border: 0; background: var(--amber); color: #221a05; font-weight: 700; border-radius: 9px;
+    padding: 10px 16px; font-size: 14.5px; cursor: pointer; }
+  .btn.ghost { background: var(--card2); color: var(--ink); border: 1px solid var(--line); font-weight: 600; }
+  .clocks { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 14px; }
+  .clock { background: var(--card2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .clock h3 { margin: 0 0 2px; font-size: 15px; }
+  .clock .rule { font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
+  .big { font: 700 34px/1.1 var(--mono); letter-spacing: -1px; }
+  .state { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px; margin-left: 8px; vertical-align: middle; }
+  .state.safe { background: var(--ok-soft); color: var(--ok); }
+  .state.expired { background: var(--bad-soft); color: var(--bad); }
+  .bar { height: 8px; border-radius: 99px; background: var(--line); margin-top: 10px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--ok); border-radius: 99px; transition: width 1s linear; }
+  .bar i.warn { background: var(--amber); }
+  .bar i.dead { background: var(--bad); }
+  .verdict-line { margin-top: 10px; font-size: 14px; padding: 9px 12px; border-radius: 9px; }
+  .verdict-line.ok { background: var(--ok-soft); color: var(--ok); }
+  .verdict-line.bad { background: var(--bad-soft); color: var(--bad); }
+  .verdict-line.note { background: var(--amber-soft); color: var(--amber); }
+  ul.foods { list-style: none; margin: 10px 0 0; padding: 0; }
+  ul.foods li { display: flex; justify-content: space-between; gap: 10px; align-items: baseline;
+    padding: 7px 4px; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+  ul.foods li .k { font-weight: 700; white-space: nowrap; font-size: 13px; }
+  ul.foods li .k.keep { color: var(--ok); }
+  ul.foods li .k.discard { color: var(--bad); }
+  ul.foods li .note { display: block; font-size: 12.5px; color: var(--muted); }
+  .pill { display: inline-block; background: var(--card2); border: 1px solid var(--line); color: var(--muted);
+    border-radius: 999px; padding: 5px 12px; font-size: 12.5px; margin: 3px 4px 0 0; cursor: pointer; }
+  .pill:hover { border-color: var(--amber); color: var(--ink); }
+  ol.now { margin: 8px 0 0; padding-left: 20px; }
+  ol.now li { margin-bottom: 7px; font-size: 14.5px; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 12px; }
+  .sources { font-size: 13px; color: var(--muted); }
+  .sources a, footer a { color: var(--amber); }
+  footer { font-size: 12.5px; color: var(--muted); text-align: center; margin-top: 26px; }
+  .err { background: var(--bad-soft); color: var(--bad); border-radius: 9px; padding: 9px 12px;
+    font-size: 14px; margin-top: 12px; display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="candle">Outage</span>Clock</h1>
+    <p>The power just died. The clock is running on your fridge. Know exactly when to save the food and when to throw it out.</p>
+  </header>
+
+  <section class="card">
+    <h2>The clock</h2>
+    <p class="sub">USDA rules: a closed fridge keeps food safe for 4 hours. A full freezer holds for about 48 hours, a half-full one for 24.</p>
+    <div class="grid">
+      <div><label for="start">Power went out at</label><input id="start" type="datetime-local"></div>
+      <div><label for="freezer">Freezer is</label>
+        <select id="freezer"><option value="full">Full or nearly full</option><option value="half">Half full or less</option></select></div>
+    </div>
+    <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn" id="justNow">Power just went out</button>
+      <button class="btn ghost" id="powerBack">Power is back</button>
+    </div>
+    <div class="clocks">
+      <div class="clock">
+        <h3>Fridge <span class="state safe" id="fridgeState">safe</span></h3>
+        <div class="rule">4-hour limit, door closed</div>
+        <div class="big" id="fridgeClock">4h 00m</div>
+        <div class="bar"><i id="fridgeBar" style="width:100%"></i></div>
+        <div class="verdict-line ok" id="fridgeVerdict"></div>
+      </div>
+      <div class="clock">
+        <h3>Freezer <span class="state safe" id="freezerState">safe</span></h3>
+        <div class="rule" id="freezerRule">48-hour limit, door closed</div>
+        <div class="big" id="freezerClock">48h 00m</div>
+        <div class="bar"><i id="freezerBar" style="width:100%"></i></div>
+        <div class="verdict-line ok" id="freezerVerdict"></div>
+      </div>
+    </div>
+    <p class="note">The clock assumes the doors stay closed. Every opening spends the cold. Saved in this browser, so you can close the tab and come back.</p>
+  </section>
+
+  <section class="card">
+    <h2>Power is back: keep it or toss it?</h2>
+    <p class="sub">The official FoodSafety.gov / USDA chart for food held above 4&deg;C (40&deg;F) for over 2 hours. Never taste food to decide - when in doubt, throw it out.</p>
+    <div class="grid">
+      <div style="grid-column: 1 / -1;"><label for="q">What are you checking?</label>
+        <input id="q" type="text" placeholder="milk, cheddar, eggs, pizza, bread, chicken..."></div>
+      <div><label for="ambient">Warmest room temp while out (&deg;C)</label><input id="ambient" type="number" min="-10" max="50" step="1" value="22"></div>
+    </div>
+    <div id="pills"></div>
+    <div class="verdict-line note" id="exposureNote"></div>
+    <ul class="foods" id="foodList"></ul>
+  </section>
+
+  <section class="card">
+    <h2>Freezer refreeze check</h2>
+    <p class="sub">Frozen food can be safely refrozen or cooked if it still contains ice crystals, or if a thermometer reads 4&deg;C (40&deg;F) or below.</p>
+    <div class="grid">
+      <div><label for="ice">Still has ice crystals?</label>
+        <select id="ice"><option value="unknown">Not sure</option><option value="yes">Yes</option><option value="no">No, fully thawed</option></select></div>
+      <div><label for="tempC">Thermometer reading (&deg;C, optional)</label><input id="tempC" type="number" min="-30" max="30" step="0.5" placeholder="no thermometer"></div>
+      <div><label for="hoursUp">Hours spent above 4&deg;C (optional)</label><input id="hoursUp" type="number" min="0" max="96" step="0.5" placeholder="unknown"></div>
+    </div>
+    <div class="verdict-line note" id="refreezeVerdict">Answer above to get the USDA refreeze verdict.</div>
+  </section>
+
+  <section class="card">
+    <h2>Right now, while it is dark</h2>
+    <ol class="now">
+      <li>Keep the fridge and freezer doors <b>closed</b>. Every peek spends the cold you have left.</li>
+      <li>Group food together in the freezer - a huddle stays cold longer.</li>
+      <li>If the outage passes 4 hours, move fridge perishables to a cooler with ice or frozen gel packs (keep it at 4&deg;C or below).</li>
+      <li>For a long outage, 25 kg (50 lb) of dry ice holds an 18-cubic-foot full freezer for about 2 days. Never touch dry ice bare-handed.</li>
+      <li>Appliance thermometers in the fridge and freezer turn guessing into knowing: fridge at or below 4&deg;C, freezer at or below -18&deg;C.</li>
+    </ol>
+  </section>
+
+  <section class="card sources">
+    <h2>Honesty corner</h2>
+    <p>The 4-hour / 48-hour / 24-hour figures are USDA and CDC guidance for a closed appliance. A frequently opened door, a nearly empty fridge, or a hot room shortens the real window. These thresholds guide the common case - they cannot certify your specific chicken. When in doubt, throw it out.</p>
+    <p>Sources:
+      <a href="https://www.foodsafety.gov/food-safety-charts/food-safety-during-power-outage">FoodSafety.gov - food safety during a power outage</a> &middot;
+      <a href="https://www.fsis.usda.gov/food-safety/safe-food-handling-and-preparation/emergencies/keep-your-food-safe-during-emergencies">USDA FSIS - keep your food safe during emergencies</a> &middot;
+      <a href="https://www.cdc.gov/food-safety/foods/keep-food-safe-after-emergency.html">CDC - keep food safe after a disaster or emergency</a>
+    </p>
+  </section>
+
+  <footer>OutageClock by the hourly app factory &middot; <a href="index.html">about</a> &middot; runs entirely in your browser</footer>
+</div>
+<script src="engine.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var LS_KEY = 'outageclock.start';
+  var LS_KIND = 'outageclock.freezer';
+
+  function toLocalInput(ms) {
+    var d = new Date(ms);
+    var p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  var savedStart = parseInt(localStorage.getItem(LS_KEY) || '', 10);
+  var startMs = isFinite(savedStart) ? savedStart : Date.now();
+  $('start').value = toLocalInput(startMs);
+  $('freezer').value = localStorage.getItem(LS_KIND) || 'full';
+
+  function setClock(stateEl, clockEl, barEl, verdictEl, st, expiredMsg, safeMsg) {
+    var pct = Math.max(0, Math.min(100, st.remainingMs / (st.limitH * 3600000) * 100));
+    clockEl.textContent = OutageClock.fmtDuration(st.remainingMs);
+    barEl.style.width = pct + '%';
+    barEl.className = st.state === 'expired' ? 'dead' : (pct < 25 ? 'warn' : '');
+    stateEl.textContent = st.state === 'expired' ? 'time is up' : 'safe';
+    stateEl.className = 'state ' + st.state;
+    if (st.state === 'expired') {
+      verdictEl.className = 'verdict-line bad';
+      verdictEl.textContent = expiredMsg;
+    } else {
+      verdictEl.className = 'verdict-line ok';
+      verdictEl.textContent = safeMsg + ' Deadline: ' + new Date(st.deadlineMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
+        ' (' + new Date(st.deadlineMs).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ').';
+    }
+  }
+
+  function tick() {
+    var startMs = new Date($('start').value).getTime();
+    if (!isFinite(startMs)) return;
+    var now = Date.now();
+    if (now < startMs) now = startMs;
+    var fSt = OutageClock.applianceStatus(OutageClock.FRIDGE_LIMIT_H, startMs, now);
+    setClock($('fridgeState'), $('fridgeClock'), $('fridgeBar'), $('fridgeVerdict'), fSt,
+      'Past 4 hours without power: discard perishables - meat, poultry, fish, eggs, milk, soft cheese, leftovers, cut fruit. Check the keep-or-toss list below.',
+      'Fridge food is safe while the door stays closed.');
+    var kind = $('freezer').value;
+    $('freezerRule').textContent = OutageClock.freezerLimitH(kind) + '-hour limit, door closed';
+    var zSt = OutageClock.applianceStatus(OutageClock.freezerLimitH(kind), startMs, now);
+    setClock($('freezerState'), $('freezerClock'), $('freezerBar'), $('freezerVerdict'), zSt,
+      'Past the ' + OutageClock.freezerLimitH(kind) + '-hour window: check each package. Ice crystals or 4 C or below means safe to refreeze; fully thawed and warm means discard. Use the refreeze check below.',
+      'Frozen food is safe while the door stays closed.');
+  }
+
+  $('justNow').addEventListener('click', function () {
+    startMs = Date.now();
+    $('start').value = toLocalInput(startMs);
+    localStorage.setItem(LS_KEY, String(startMs));
+    tick();
+  });
+  $('powerBack').addEventListener('click', function () {
+    localStorage.removeItem(LS_KEY);
+    document.getElementById('q').focus();
+  });
+  $('start').addEventListener('input', function () {
+    var ms = new Date($('start').value).getTime();
+    if (isFinite(ms)) { localStorage.setItem(LS_KEY, String(ms)); }
+    tick();
+  });
+  $('freezer').addEventListener('input', function () {
+    localStorage.setItem(LS_KIND, $('freezer').value);
+    tick();
+  });
+  setInterval(tick, 1000);
+  tick();
+
+  /* keep-or-toss lookup */
+  var QUICK = ['milk', 'cheddar', 'brie', 'eggs', 'butter', 'chicken', 'pizza', 'bread', 'fruit pie', 'cookie dough', 'cut fruit', 'mayonnaise'];
+  $('pills').innerHTML = QUICK.map(function (w) { return '<span class="pill" data-q="' + w + '">' + w + '</span>'; }).join('');
+  Array.prototype.forEach.call(document.querySelectorAll('.pill'), function (p) {
+    p.addEventListener('click', function () { $('q').value = p.getAttribute('data-q'); renderFoods(); });
+  });
+
+  function renderFoods() {
+    var q = $('q').value;
+    var rows = q.trim() ? OutageClock.lookupFood(q) : OutageClock.FOOD_CHART;
+    var html = '';
+    var lastCat = '';
+    rows.slice(0, 12).forEach(function (f) {
+      html += '<li><span>' + (q.trim() ? f.item + ' <span style="color:var(--muted);font-size:12px">(' + f.cat.toLowerCase() + ')</span>' : f.item) +
+        (f.note ? '<span class="note">' + f.note + '</span>' : '') + '</span>' +
+        '<span class="k ' + f.kind + '">' + (f.kind === 'keep' ? 'KEEP' : 'DISCARD') + '</span></li>';
+    });
+    $('foodList').innerHTML = html || '<li><span>No matches - try "milk", "cheese", "chicken".</span></li>';
+    var amb = parseFloat($('ambient').value);
+    if (isFinite(amb)) {
+      var lim = OutageClock.exposureLimitH(amb);
+      $('exposureNote').textContent = 'The 40 F rule: perishables that spent ' + lim + '+ hour' + (lim === 1 ? '' : 's') +
+        ' above 4 C (40 F) go in the trash' + (lim === 1 ? ' - the window drops to 1 hour in rooms at 32 C (90 F) or hotter.' : ' (1 hour if the room hit 32 C / 90 F).');
+    }
+  }
+  $('q').addEventListener('input', renderFoods);
+  $('ambient').addEventListener('input', renderFoods);
+  renderFoods();
+
+  /* refreeze checker */
+  function renderRefreeze() {
+    var ice = $('ice').value;
+    var tempRaw = $('tempC').value, hoursRaw = $('hoursUp').value;
+    var v = OutageClock.refreezeVerdict({
+      hasIceCrystals: ice === 'unknown' ? null : (ice === 'yes'),
+      tempC: tempRaw === '' ? null : parseFloat(tempRaw),
+      hoursAbove4C: hoursRaw === '' ? null : parseFloat(hoursRaw)
+    });
+    var el = $('refreezeVerdict');
+    el.className = 'verdict-line ' + (v.verdict === 'refreeze' ? 'ok' : (v.verdict === 'discard' ? 'bad' : 'note'));
+    el.textContent = (v.verdict === 'refreeze' ? 'SAFE TO REFREEZE: ' : (v.verdict === 'discard' ? 'DISCARD: ' : 'CHECK EACH PACKAGE: ')) + v.reason;
+  }
+  ['ice', 'tempC', 'hoursUp'].forEach(function (id) { $(id).addEventListener('input', renderRefreeze); });
+  renderRefreeze();
+})();
+</script>
+</body>
+</html>
